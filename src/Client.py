@@ -50,7 +50,7 @@ class Client:
 		self.start["command"] = self.playMovie
 		self.start.grid(row=1, column=1, padx=2, pady=2)
 		
-		# Create Pause button			
+		# Create Pause  button
 		self.pause = Button(self.master, width=20, padx=3, pady=3)
 		self.pause["text"] = "Pause"
 		self.pause["command"] = self.pauseMovie
@@ -69,7 +69,7 @@ class Client:
 	def setupMovie(self):
 		"""Setup button handler."""
 	#TODO
-	
+
 	def exitClient(self):
 		"""Teardown button handler."""
 	#TODO
@@ -97,19 +97,40 @@ class Client:
 	def connectToServer(self):
 		"""Connect to the Server. Start a new RTSP/TCP session."""
 	#TODO
+		self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.client_socket.connect((self.serverAddr, self.serverPort))
 	
 	def sendRtspRequest(self, requestCode):
 		"""Send RTSP request to the server."""	
 		#-------------
 		# TO COMPLETE
 		#-------------
-		
+		self.rtspSeq += 1
+		if requestCode == self.SETUP:
+			msg = 'SETUP ' + str(self.fileName) + ' RTSP/1.0\nCSeq: ' + str(
+				self.rtspSeq) + '\nTransport: RTP/UDP; client_port=' + str(self.rtpPort)
+		elif requestCode == self.PLAY:
+			msg = 'PLAY ' + str(self.fileName) + ' RTSP/1.0\nCSeq: ' + str(
+				self.rtspSeq) + '\nSession: ' + str(self.sessionId)
+		elif requestCode == self.PAUSE:
+			msg = 'PAUSE ' + str(self.fileName) + ' RTSP/1.0\nCSeq: ' + str(
+				self.rtspSeq) + '\nSession: ' + str(self.sessionId)
+		elif requestCode == self.TEARDOWN:
+			msg = 'TEARDOWN ' + str(self.fileName) + ' RTSP/1.0\nCSeq: ' + str(
+				self.rtspSeq) + '\nSession: ' + str(self.sessionId)
+		else:
+			msg = 'Unknown request code'
+		print("Client sent: " + msg)
+		self.client_socket.send(msg.encode())
 	
 	
 	def recvRtspReply(self):
 		"""Receive RTSP reply from the server."""
 		#TODO
-	
+		data = self.client_socket.recv(256)
+		print("Data received:\n" + data.decode("utf-8"))
+		self.parseRtspReply(data)
+
 	def parseRtspReply(self, data):
 		"""Parse the RTSP reply from the server."""
 		#TODO
@@ -120,12 +141,14 @@ class Client:
 		# TO COMPLETE
 		#-------------
 		# Create a new datagram socket to receive RTP packets from the server
-		# self.rtpSocket = ...
-		
+		self.rtpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+		self.rtpSocket.bind(('', self.rtpPort))
+		print("RTP port is ready ...")
 		# Set the timeout value of the socket to 0.5sec
-		# ...
+		self.rtpSocket.settimeout(0.5)
 		
 
 	def handler(self):
 		"""Handler on explicitly closing the GUI window."""
 		#TODO
+		self.client_socket.close()
