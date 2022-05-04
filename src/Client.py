@@ -108,7 +108,7 @@ class Client:
 		self.rtspSeq += 1
 		if requestCode == self.SETUP:
 			msg = 'SETUP ' + str(self.fileName) + ' RTSP/1.0\nCSeq: ' + str(
-				self.rtspSeq) + '\nTransport: RTP/UDP; client_port=' + str(self.rtpPort)
+				self.rtspSeq) + '\nTransport: RTP/UDP; client_port= ' + str(self.rtpPort)
 			self.requestSent = self.SETUP
 		elif requestCode == self.PLAY:
 			msg = 'PLAY ' + str(self.fileName) + ' RTSP/1.0\nCSeq: ' + str(
@@ -141,10 +141,10 @@ class Client:
 		"""Parse the RTSP reply from the server."""
 		#TODO
 		lines = data.split('\n')
-		status = lines[0].split(' ')[1]
-		seq = lines[1].split(' ')[1]
-		session = lines[2].split(' ')[1]
-		if status == '200':
+		status = int(lines[0].split(' ')[1])
+		seq = int(lines[1].split(' ')[1])
+		session = int(lines[2].split(' ')[1])
+		if status == 200:
 			if self.requestSent == self.SETUP:
 				if self.state == self.INIT and self.sessionId == 0 and self.rtspSeq == seq:
 					self.state = self.READY
