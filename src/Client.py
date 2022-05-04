@@ -69,19 +69,19 @@ class Client:
 	def setupMovie(self):
 		"""Setup button handler."""
 	#TODO
-
+		self.sendRtspRequest(self.SETUP)
 	def exitClient(self):
 		"""Teardown button handler."""
 	#TODO
-
+		self.sendRtspRequest(self.TEARDOWN)
 	def pauseMovie(self):
 		"""Pause button handler."""
 	#TODO
-	
+		self.sendRtspRequest(self.PAUSE)
 	def playMovie(self):
 		"""Play button handler."""
 	#TODO
-	
+		self.sendRtspRequest(self.PLAY)
 	def listenRtp(self):		
 		"""Listen for RTP packets."""
 		#TODO
@@ -109,32 +109,57 @@ class Client:
 		if requestCode == self.SETUP:
 			msg = 'SETUP ' + str(self.fileName) + ' RTSP/1.0\nCSeq: ' + str(
 				self.rtspSeq) + '\nTransport: RTP/UDP; client_port=' + str(self.rtpPort)
+			self.requestSent = self.SETUP
 		elif requestCode == self.PLAY:
 			msg = 'PLAY ' + str(self.fileName) + ' RTSP/1.0\nCSeq: ' + str(
 				self.rtspSeq) + '\nSession: ' + str(self.sessionId)
+			self.requestSent = self.PLAY
 		elif requestCode == self.PAUSE:
 			msg = 'PAUSE ' + str(self.fileName) + ' RTSP/1.0\nCSeq: ' + str(
 				self.rtspSeq) + '\nSession: ' + str(self.sessionId)
+			self.requestSent = self.PAUSE
 		elif requestCode == self.TEARDOWN:
 			msg = 'TEARDOWN ' + str(self.fileName) + ' RTSP/1.0\nCSeq: ' + str(
 				self.rtspSeq) + '\nSession: ' + str(self.sessionId)
+			self.requestSent = self.TEARDOWN
 		else:
 			msg = 'Unknown request code'
+			self.requestSent = -1
 		print("Client sent: " + msg)
 		self.client_socket.send(msg.encode())
-	
+		self.recvRtspReply()
 	
 	def recvRtspReply(self):
 		"""Receive RTSP reply from the server."""
 		#TODO
 		data = self.client_socket.recv(256)
-		print("Data received:\n" + data.decode("utf-8"))
-		self.parseRtspReply(data)
+		if data:
+			print("Data received:\n" + data.decode("utf-8"))
+			self.parseRtspReply(data.decode("utf-8"))
 
 	def parseRtspReply(self, data):
 		"""Parse the RTSP reply from the server."""
 		#TODO
-	
+		lines = data.split('\n')
+		status = lines[0].split(' ')[1]
+		seq = lines[1].split(' ')[1]
+		session = lines[2].split(' ')[1]
+		if status == '200':
+			if self.requestSent == self.SETUP:
+				if self.state == self.INIT and self.sessionId == 0 and self.rtspSeq == seq:
+					self.state = self.READY
+					self.sessionId = session
+			elif self.requestSent == self.PLAY:
+				if self.state == self.READY and self.sessionId == session and self.rtspSeq == seq:
+					self.state = self.PLAYING
+			elif self.requestSent == self.PAUSE:
+				if self.state == self.PLAYING and self.sessionId == session and self.rtspSeq == seq:
+					self.state = self.READY
+			elif self.requestSent == self.TEARDOWN:
+				if (self.state == self.READY or self.state == self.PLAYING) and self.sessionId == session and self.rtspSeq == seq:
+					self.state = self.INIT
+					self.sessionId = 0
+
 	def openRtpPort(self):
 		"""Open RTP socket binded to a specified port."""
 		#-------------
