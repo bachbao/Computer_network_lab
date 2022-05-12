@@ -17,7 +17,8 @@ class Server:
 		while True:
 			clientInfo = {}
 			clientInfo['rtspSocket'] = rtspSocket.accept()
-			ServerWorker(clientInfo).run()		
+			print(f"Accepted connection with {clientInfo['rtspSocket'][1]}")
+			ServerWorker(clientInfo).run()
 
 if __name__ == "__main__":
 	(Server()).main()

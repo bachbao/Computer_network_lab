@@ -26,6 +26,7 @@ class ServerWorker:
 		
 	def run(self):
 		threading.Thread(target=self.recvRtspRequest).start()
+		
 	
 	def recvRtspRequest(self):
 		"""Receive RTSP request from the client."""
@@ -33,7 +34,7 @@ class ServerWorker:
 		while True:            
 			data = connSocket.recv(256)
 			if data:
-				print("Data received:\n" + data.decode("utf-8"))
+				print("[Data received:]\n" + data.decode("utf-8") + "\n------------------")
 				self.processRtspRequest(data.decode("utf-8"))
 	
 	def processRtspRequest(self, data):
@@ -152,13 +153,13 @@ class ServerWorker:
 	def replyRtsp(self, code, seq):
 		"""Send RTSP reply to the client."""
 		if code == self.OK_200:
-			#print("200 OK")
+			print("200 OK\n")
 			reply = 'RTSP/1.0 200 OK\nCSeq: ' + seq + '\nSession: ' + str(self.clientInfo['session'])
 			connSocket = self.clientInfo['rtspSocket'][0]
 			connSocket.send(reply.encode())
 		
 		# Error messages
 		elif code == self.FILE_NOT_FOUND_404:
-			print("404 NOT FOUND")
+			print("404 NOT FOUND\n")
 		elif code == self.CON_ERR_500:
-			print("500 CONNECTION ERROR")
+			print("500 CONNECTION ERROR\n")
