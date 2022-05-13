@@ -40,6 +40,7 @@ class Client:
 		# Addtional attribute for statistic
 		self.RtpLossRate = 0
 		self.vidDataRate = 0
+		self.fpsRate = 0
 		self.flagFirstRecv = False
 
 		self.savedTimestamp = 0
@@ -47,6 +48,7 @@ class Client:
 
 		self.lossCounter = 0
 		self.dataCounter = 0
+		self.framCounter = 0
 		
 	# THIS GUI IS JUST FOR REFERENCE ONLY, STUDENTS HAVE TO CREATE THEIR OWN GUI 	
 	def createWidgets(self):
@@ -156,12 +158,15 @@ class Client:
 			if rtpPacket.timestamp() - self.savedTimestamp >= 1:
 				self.vidDataRate = self.dataCounter / 1000
 				self.RtpLossRate = int(float(self.lossCounter/(rtpPacket.seqNum() - self.savedRtpseq))*100)
-				print(f"data rate:{self.vidDataRate}kB/s | loss rate: {self.RtpLossRate}%")
+				self.fpsRate = self.framCounter
+				print(f"data rate:{self.vidDataRate}kB/s | fps:{self.fpsRate}|loss rate: {self.RtpLossRate}%")
 				self.flagFirstRecv = False
+				self.framCounter = 0
 				self.lossCounter = 0
 				self.dataCounter = 0
 			else:
 				self.dataCounter += len(rtpPacket.getPayload())
+				self.framCounter += 1
 				if rtpPacket.seqNum() != self.frameNbr + 1:
 					self.lossCounter += rtpPacket.seqNum() - self.frameNbr
 		self.frameNbr = rtpPacket.seqNum()
@@ -292,7 +297,7 @@ class Client:
 		self.savedRtpseq = 0
 		self.lossCounter = 0
 		self.dataCounter = 0
-
+		self.framCounter = 0
 	def onDescribeAccepted(self):
 		# TODO: for bbace, process description
 		pass
