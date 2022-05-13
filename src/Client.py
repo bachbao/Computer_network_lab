@@ -19,6 +19,7 @@ class Client:
 	PLAY = 1
 	PAUSE = 2
 	TEARDOWN = 3
+	DESCRIBE = 4
 	
 	# Initiation..
 	def __init__(self, master: tk.Tk, serveraddr, serverport, rtpport, filename):
@@ -64,14 +65,6 @@ class Client:
 			image=self.frame
 		)
 		self.label.pack(expand=True, fill='both')
-
-		# Create Setup button
-		self.setup = ttk.Button(
-			self.master,
-			text="SETUP",
-			command=self.setupMovie
-		)
-		self.setup.pack(expand=True, fill='both', side='left', ipady=10)
 		
 		# Create Play button
 		self.play = ttk.Button(
@@ -81,7 +74,7 @@ class Client:
 		)
 		self.play.pack(expand=True, fill='both',side='left', ipady=10)
 		
-		# # Create Pause  button
+		# Create Pause  button
 		self.pause = ttk.Button(
 			self.master,
 			text="PAUSE",
@@ -89,20 +82,21 @@ class Client:
 		)
 		self.pause.pack(expand=True, fill='both', side='left', ipady=10)
 		
-		# Create Teardown button
+		# Create Stop button
 		self.teardown = ttk.Button(
 			self.master,
-			text="TEAR",
+			text="STOP",
 			command=self.exitClient
 		)
 		self.teardown.pack(expand=True, fill='both', side='left', ipady=10)
-	
-	def setupMovie(self):
-		"""Setup button handler."""
-		if (self.state != self.INIT):
-			print("Not in INIT state!")
-		else:
-			self.sendRtspRequest(self.SETUP)
+
+		# Create Describe button
+		self.describe = ttk.Button(
+			self.master,
+			text="DESCRIBE",
+			command=self.describeSession
+		)
+		self.teardown.pack(expand=True, fill='both', side='left', ipady=10)
 
 	def exitClient(self):
 		"""Teardown button handler."""
@@ -120,10 +114,19 @@ class Client:
 
 	def playMovie(self):
 		"""Play button handler."""
-		if (self.state != self.READY):
-			print("Not in READY state!")
-		else:
+		if (self.state != self.READY and self.state != self.INIT):
+			print("Not in READY or INIT state!")
+		if (self.state == self.INIT):
+			self.sendRtspRequest(self.SETUP)
+		if (self.state == self.READY):
 			self.sendRtspRequest(self.PLAY)
+	
+	
+	def describeSession(self):
+		if (self.state == self.INIT):
+			print("Play some video to get session description!")
+		else:
+			self.sendRtspRequest(self.DESCRIBE)
 
 	def listenRtp(self):
 		"""Listen for RTP packets."""
@@ -144,7 +147,6 @@ class Client:
 				except socket.timeout:
 					pass # delay in streaming
 	
-	# For bbace
 	def computeStatistic(self, rtpPacket: RtpPacket):
 		if not self.flagFirstRecv:
 			self.flagFirstRecv = True
@@ -152,8 +154,9 @@ class Client:
 			self.savedRtpseq = rtpPacket.seqNum()
 		else:
 			if rtpPacket.timestamp() - self.savedTimestamp >= 1:
-				self.vidDataRate = self.dataCounter
+				self.vidDataRate = self.dataCounter / 1000
 				self.RtpLossRate = int(float(self.lossCounter/(rtpPacket.seqNum() - self.savedRtpseq))*100)
+				print(f"data rate:{self.vidDataRate}kB/s | loss rate: {self.RtpLossRate}%")
 				self.flagFirstRecv = False
 				self.lossCounter = 0
 				self.dataCounter = 0
@@ -203,6 +206,10 @@ class Client:
 			msg = 'TEARDOWN ' + str(self.fileName) + ' RTSP/1.0\nCSeq: ' + str(
 				self.rtspSeq) + '\nSession: ' + str(self.sessionId)
 			self.requestSent = self.TEARDOWN
+		elif requestCode == self.DESCRIBE:
+			# TODO: for bbace, send something to server to get describe session
+
+			self.requestSent = self.DESCRIBE
 		else:
 			msg = 'Unknown request code'
 			self.requestSent = -1
@@ -243,6 +250,8 @@ class Client:
 					self.onPauseAccepted()
 				elif self.requestSent == self.TEARDOWN:
 					self.onTearDownAccepted()
+				elif self.requestSent == self.DESCRIBE:
+					self.onDescribeAccepted()
 		else:	# negative response from server
 			print(f"Oops from server: status<{status}> at seq<{seq}> in session<{session}>")
 
@@ -274,17 +283,20 @@ class Client:
 		self.label['image']=self.frame	# update default frame
 		self.rtpSocket.close()			# close RTP socket
 		self.teardownAcked = 0			# reset teardown ack
-		###################### reset statistic number  ################
+		
+		# reset statistic state
 		self.RtpLossRate = 0
 		self.vidDataRate = 0
 		self.flagFirstRecv = False
-
 		self.savedTimestamp = 0
 		self.savedRtpseq = 0
-
 		self.lossCounter = 0
 		self.dataCounter = 0
-		###############################################################
+
+	def onDescribeAccepted(self):
+		# TODO: for bbace, process description
+		pass
+
 	def openRtpPort(self):
 		"""Open RTP socket binded to a specified port."""
 		#-------------
