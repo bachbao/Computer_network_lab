@@ -35,6 +35,17 @@ class Client:
 		self.teardownAcked = 0
 		self.connectToServer()
 		self.frameNbr = 0
+
+		# Addtional attribute for statistic
+		self.RtpLossRate = 0
+		self.vidDataRate = 0
+		self.flagFirstRecv = False
+
+		self.savedTimestamp = 0
+		self.savedRtpseq = 0
+
+		self.lossCounter = 0
+		self.dataCounter = 0
 		
 	# THIS GUI IS JUST FOR REFERENCE ONLY, STUDENTS HAVE TO CREATE THEIR OWN GUI 	
 	def createWidgets(self):
@@ -114,7 +125,7 @@ class Client:
 		else:
 			self.sendRtspRequest(self.PLAY)
 
-	def listenRtp(self):		
+	def listenRtp(self):
 		"""Listen for RTP packets."""
 		while True:
 			if (self.teardownAcked == 1):
@@ -135,7 +146,22 @@ class Client:
 	
 	# For bbace
 	def computeStatistic(self, rtpPacket: RtpPacket):
-		pass
+		if not self.flagFirstRecv:
+			self.flagFirstRecv = True
+			self.savedTimestamp = rtpPacket.timestamp()
+			self.savedRtpseq = rtpPacket.seqNum()
+		else:
+			if rtpPacket.timestamp() - self.savedTimestamp >= 1:
+				self.vidDataRate = self.dataCounter
+				self.RtpLossRate = int(float(self.lossCounter/(rtpPacket.seqNum() - self.savedRtpseq))*100)
+				self.flagFirstRecv = False
+				self.lossCounter = 0
+				self.dataCounter = 0
+			else:
+				self.dataCounter += len(rtpPacket.getPayload())
+				if rtpPacket.seqNum() != self.frameNbr + 1:
+					self.lossCounter += rtpPacket.seqNum() - self.frameNbr
+		self.frameNbr = rtpPacket.seqNum()
 
 	def writeFrame(self, data):
 		"""Write the received frame to a temp image file. Return the image file."""
@@ -248,7 +274,17 @@ class Client:
 		self.label['image']=self.frame	# update default frame
 		self.rtpSocket.close()			# close RTP socket
 		self.teardownAcked = 0			# reset teardown ack
+		###################### reset statistic number  ################
+		self.RtpLossRate = 0
+		self.vidDataRate = 0
+		self.flagFirstRecv = False
 
+		self.savedTimestamp = 0
+		self.savedRtpseq = 0
+
+		self.lossCounter = 0
+		self.dataCounter = 0
+		###############################################################
 	def openRtpPort(self):
 		"""Open RTP socket binded to a specified port."""
 		#-------------
