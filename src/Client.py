@@ -1,9 +1,9 @@
-from tkinter import ttk
+from tkinter import Tk, ttk
 import tkinter as tk
 import tkinter.messagebox
 from PIL import Image, ImageTk
 import socket, threading, sys, traceback, os
-
+import io
 from RtpPacket import RtpPacket
 
 CACHE_FILE_NAME = "cache-"
@@ -39,6 +39,20 @@ class Client:
 	# THIS GUI IS JUST FOR REFERENCE ONLY, STUDENTS HAVE TO CREATE THEIR OWN GUI 	
 	def createWidgets(self):
 		"""Build GUI."""
+		self.master.geometry("800x600")
+		self.master.resizable(False, False)
+		self.defaultFrame = tk.PhotoImage(file="empty.png")
+		self.frame = self.defaultFrame
+
+		# Create a label to display the movie
+		self.label = ttk.Label(
+			self.master,
+			padding=5,
+			background='black',
+			anchor='center',
+			image=self.frame
+		)
+		self.label.pack(expand=True, fill='both')
 
 		# Create Setup button
 		self.setup = ttk.Button(
@@ -46,7 +60,7 @@ class Client:
 			text="SETUP",
 			command=self.setupMovie
 		)
-		self.setup.grid(row=1, column=0, padx=2, pady=2)
+		self.setup.pack(expand=True, fill='both', side='left', ipady=10)
 		
 		# Create Play button
 		self.play = ttk.Button(
@@ -54,32 +68,23 @@ class Client:
 			text="PLAY",
 			command=self.playMovie
 		)
-		self.play.grid(row=1, column=1, padx=2, pady=2)
+		self.play.pack(expand=True, fill='both',side='left', ipady=10)
 		
 		# # Create Pause  button
 		self.pause = ttk.Button(
 			self.master,
 			text="PAUSE",
-			command=self.playMovie
+			command=self.pauseMovie
 		)
-		self.pause.grid(row=1, column=2, padx=2, pady=2)
+		self.pause.pack(expand=True, fill='both', side='left', ipady=10)
 		
-		# # Create Teardown button
+		# Create Teardown button
 		self.teardown = ttk.Button(
 			self.master,
 			text="TEAR",
-			command=self.playMovie
+			command=self.exitClient
 		)
-		self.teardown.grid(row=1, column=3, padx=2, pady=2)
-		
-		# Create a label to display the movie
-		
-		self.label = ttk.Label(
-			self.master,
-			padding=5
-		)
-		self.label.grid(row=0, column=0, columnspan=2, sticky="nsew")
-		
+		self.teardown.pack(expand=True, fill='both', side='left', ipady=10)
 	
 	def setupMovie(self):
 		"""Setup button handler."""
@@ -112,16 +117,33 @@ class Client:
 	def listenRtp(self):		
 		"""Listen for RTP packets."""
 		while True:
-			data = self.rtpSocket.recv(256)
-			# TODO
-					
+			if (self.teardownAcked == 1):
+				self.onTearDownAcked()
+				break
+			if (self.state == self.PLAYING):
+				try:
+					data = self.rtpSocket.recv(16000)
+					if data:
+						rtpPacket = RtpPacket()
+						rtpPacket.decode(data)
+						# print(f"size:{len(rtpPacket.getPayload())}")
+						self.computeStatistic(rtpPacket)
+						self.writeFrame(rtpPacket.getPayload())
+						self.updateMovie(self.frame)
+				except socket.timeout:
+					pass # delay in streaming
+	
+	# For bbace
+	def computeStatistic(self, rtpPacket: RtpPacket):
+		pass
+
 	def writeFrame(self, data):
 		"""Write the received frame to a temp image file. Return the image file."""
-	#TODO
-	
+		self.frame = ImageTk.PhotoImage(Image.open(io.BytesIO(data)))
+
 	def updateMovie(self, imageFile):
 		"""Update the image file as video frame in the GUI."""
-	#TODO
+		self.label['image']=self.frame
 		
 	def connectToServer(self):
 		"""Connect to the Server. Start a new RTSP/TCP session."""
@@ -188,9 +210,9 @@ class Client:
 				print(f"SessionId conflict: clientId<{self.sessionId}> vs. serverId<{session}>")
 			else:
 				if self.requestSent == self.SETUP:
-					self.onSetupResponse(session)
+					self.onSetupAccepted(session)
 				elif self.requestSent == self.PLAY:
-					self.onPlayResponse()
+					self.onPlayAccepted()
 				elif self.requestSent == self.PAUSE:
 					self.onPauseAccepted()
 				elif self.requestSent == self.TEARDOWN:
@@ -198,24 +220,34 @@ class Client:
 		else:	# negative response from server
 			print(f"Oops from server: status<{status}> at seq<{seq}> in session<{session}>")
 
-	def onSetupResponse(self, sessionId: int):
+	def onSetupAccepted(self, sessionId: int):
 		if (self.sessionId != 0):
 			print(f"Error: session ID has not been reseted to 0")
 			self.sessionId = 0
 		else:
 			self.sessionId = sessionId
 			self.openRtpPort()
+			self.playJob = threading.Thread(target=self.listenRtp)
+			self.playJob.start()
 			self.state = self.READY
 	
-	def onPlayResponse(self):
+	def onPlayAccepted(self):
 		self.state = self.PLAYING
 	
 	def onPauseAccepted(self):
 		self.state = self.READY
 	
 	def onTearDownAccepted(self):
-		self.state = self.INIT
+		self.teardownAcked = 1
 		self.sessionId = 0
+		self.state = self.INIT
+	
+	def onTearDownAcked(self):
+		self.frame = self.defaultFrame	# reset image
+		self.frameNbr = 0				# reset frame number
+		self.label['image']=self.frame	# update default frame
+		self.rtpSocket.close()			# close RTP socket
+		self.teardownAcked = 0			# reset teardown ack
 
 	def openRtpPort(self):
 		"""Open RTP socket binded to a specified port."""
@@ -233,7 +265,10 @@ class Client:
 
 	def handler(self):
 		"""Handler on explicitly closing the GUI window."""
-		self.client_socket.close()
-		if (hasattr(self, "rtpSocket")):
-			self.rtpSocket.close()
-		self.master.quit()
+		if (self.state != self.INIT):
+			print("Please tear down session before quitting")
+		else:
+			self.client_socket.close()
+			if (hasattr(self, "rtpSocket")):
+				self.rtpSocket.close()
+			self.master.quit()
