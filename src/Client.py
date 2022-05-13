@@ -36,27 +36,27 @@ class Client:
 		self.teardownAcked = 0
 		self.connectToServer()
 		self.frameNbr = 0
-
-		# Addtional attribute for statistic
-		self.RtpLossRate = 0
-		self.vidDataRate = 0
-		self.fpsRate = 0
-		self.flagFirstRecv = False
-
-		self.savedTimestamp = 0
-		self.savedRtpseq = 0
-
-		self.lossCounter = 0
-		self.dataCounter = 0
-		self.framCounter = 0
 		
 	# THIS GUI IS JUST FOR REFERENCE ONLY, STUDENTS HAVE TO CREATE THEIR OWN GUI 	
 	def createWidgets(self):
 		"""Build GUI."""
 		self.master.geometry("800x600")
 		self.master.resizable(False, False)
+
+		# frame attributes
 		self.defaultFrame = tk.PhotoImage(file="empty.png")
 		self.frame = self.defaultFrame
+
+		# Addtional attributes for statistic
+		self.RtpLossRate = 0
+		self.vidDataRate = 0
+		self.fpsRate = 0
+		self.flagFirstRecv = False
+		self.savedTimestamp = 0
+		self.savedRtpseq = 0
+		self.lossCounter = 0
+		self.dataCounter = 0
+		self.framCounter = 0
 
 		# Create a label to display the movie
 		self.label = ttk.Label(
@@ -64,7 +64,10 @@ class Client:
 			padding=5,
 			background='black',
 			anchor='center',
-			image=self.frame
+			image=self.frame,
+			foreground='white',
+			compound='image',
+			text=self.getStatisticString()
 		)
 		self.label.pack(expand=True, fill='both')
 		
@@ -98,7 +101,7 @@ class Client:
 			text="DESCRIBE",
 			command=self.describeSession
 		)
-		self.teardown.pack(expand=True, fill='both', side='left', ipady=10)
+		self.describe.pack(expand=True, fill='both', side='left', ipady=10)
 
 	def exitClient(self):
 		"""Teardown button handler."""
@@ -159,7 +162,8 @@ class Client:
 				self.vidDataRate = self.dataCounter / 1000
 				self.RtpLossRate = int(float(self.lossCounter/(rtpPacket.seqNum() - self.savedRtpseq))*100)
 				self.fpsRate = self.framCounter
-				print(f"data rate:{self.vidDataRate}kB/s | fps:{self.fpsRate}|loss rate: {self.RtpLossRate}%")
+				# print(f"data rate:{self.vidDataRate}kB/s | fps:{self.fpsRate}|loss rate: {self.RtpLossRate}%")
+				self.label['text'] = self.getStatisticString()
 				self.flagFirstRecv = False
 				self.framCounter = 0
 				self.lossCounter = 0
@@ -170,6 +174,9 @@ class Client:
 				if rtpPacket.seqNum() != self.frameNbr + 1:
 					self.lossCounter += rtpPacket.seqNum() - self.frameNbr
 		self.frameNbr = rtpPacket.seqNum()
+	
+	def getStatisticString(self) -> str:
+		return f"Data rate: {self.vidDataRate}kB/s | Loss rate: {self.RtpLossRate}% | FPS: {self.fpsRate}"
 
 	def writeFrame(self, data):
 		"""Write the received frame to a temp image file. Return the image file."""
@@ -268,10 +275,12 @@ class Client:
 			self.sessionId = sessionId
 			self.openRtpPort()
 			self.playJob = threading.Thread(target=self.listenRtp)
+			self.playJob.daemon = True
 			self.playJob.start()
 			self.state = self.READY
 	
 	def onPlayAccepted(self):
+		self.label['compound'] = 'bottom'
 		self.state = self.PLAYING
 	
 	def onPauseAccepted(self):
@@ -279,17 +288,18 @@ class Client:
 	
 	def onTearDownAccepted(self):
 		self.teardownAcked = 1
-		self.sessionId = 0
 		self.state = self.INIT
 	
 	def onTearDownAcked(self):
 		self.frame = self.defaultFrame	# reset image
 		self.frameNbr = 0				# reset frame number
 		self.label['image']=self.frame	# update default frame
+		self.label['compound'] = 'image'# update compound
 		self.rtpSocket.close()			# close RTP socket
+		self.sessionId = 0				# reset session ID
 		self.teardownAcked = 0			# reset teardown ack
 		
-		# reset statistic state
+		# reset statistic states
 		self.RtpLossRate = 0
 		self.vidDataRate = 0
 		self.flagFirstRecv = False
@@ -298,6 +308,7 @@ class Client:
 		self.lossCounter = 0
 		self.dataCounter = 0
 		self.framCounter = 0
+
 	def onDescribeAccepted(self):
 		# TODO: for bbace, process description
 		pass
@@ -319,9 +330,6 @@ class Client:
 	def handler(self):
 		"""Handler on explicitly closing the GUI window."""
 		if (self.state != self.INIT):
-			print("Please tear down session before quitting")
-		else:
-			self.client_socket.close()
-			if (hasattr(self, "rtpSocket")):
-				self.rtpSocket.close()
-			self.master.quit()
+			self.sendRtspRequest(self.TEARDOWN)
+		self.client_socket.close()
+		self.master.quit()
