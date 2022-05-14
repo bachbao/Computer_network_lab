@@ -13,6 +13,7 @@ class Client:
 	INIT = 0
 	READY = 1
 	PLAYING = 2
+	INFO = 3
 	state = INIT
 	
 	SETUP = 0
@@ -40,12 +41,10 @@ class Client:
 	# THIS GUI IS JUST FOR REFERENCE ONLY, STUDENTS HAVE TO CREATE THEIR OWN GUI 	
 	def createWidgets(self):
 		"""Build GUI."""
-		self.master.geometry("800x600")
-		self.master.resizable(False, False)
+		self.master.geometry("600x400")
 
 		# frame attributes
-		self.defaultFrame = tk.PhotoImage(file="empty.png")
-		self.frame = self.defaultFrame
+		self.frame = None
 
 		# Addtional attributes for statistic
 		self.RtpLossRate = 0
@@ -58,16 +57,25 @@ class Client:
 		self.dataCounter = 0
 		self.framCounter = 0
 
+		# create a label to display statistic
+		self.statLabel = ttk.Label(
+			self.master,
+			padding=5,
+			anchor='center',
+			text=self.getStatisticString()
+		)
+		self.statLabel.pack(fill='x')
+
 		# Create a label to display the movie
 		self.label = ttk.Label(
 			self.master,
 			padding=5,
 			background='black',
 			anchor='center',
-			image=self.frame,
-			foreground='white',
-			compound='image',
-			text=self.getStatisticString()
+			foreground = 'white',
+			justify = tk.CENTER,
+			compound='none',
+			text=self.getDefaultString()
 		)
 		self.label.pack(expand=True, fill='both')
 		
@@ -105,8 +113,8 @@ class Client:
 
 	def exitClient(self):
 		"""Teardown button handler."""
-		if (self.state != self.PLAYING and self.state != self.READY):
-			print("Not in PLAYING or READY state!")
+		if (self.state != self.PLAYING and self.state != self.READY and self.state != self.INFO):
+			print("Not in PLAYING or READY or INFO state!")
 		else:
 			self.sendRtspRequest(self.TEARDOWN)
 
@@ -119,18 +127,22 @@ class Client:
 
 	def playMovie(self):
 		"""Play button handler."""
-		if (self.state != self.READY and self.state != self.INIT):
+		if (self.state != self.READY and self.state != self.INIT and self.state != self.INFO):
 			print("Not in READY or INIT state!")
-		if (self.state == self.INIT):
-			self.sendRtspRequest(self.SETUP)
-		if (self.state == self.READY):
+		else:
+			if (self.state == self.INIT):
+				self.sendRtspRequest(self.SETUP)
 			self.sendRtspRequest(self.PLAY)
 	
 	
 	def describeSession(self):
 		if (self.state == self.INIT):
 			print("Play some video to get session description!")
+		elif (self.state == self.INFO):
+			self.sendRtspRequest(self.PLAY)
 		else:
+			if (self.state == self.PLAYING):
+				self.sendRtspRequest(self.PAUSE)
 			self.sendRtspRequest(self.DESCRIBE)
 
 	def listenRtp(self):
@@ -145,7 +157,6 @@ class Client:
 					if data:
 						rtpPacket = RtpPacket()
 						rtpPacket.decode(data)
-						# print(f"size:{len(rtpPacket.getPayload())}")
 						self.computeStatistic(rtpPacket)
 						self.writeFrame(rtpPacket.getPayload())
 						self.updateMovie(self.frame)
@@ -162,8 +173,7 @@ class Client:
 				self.vidDataRate = self.dataCounter / 1000
 				self.RtpLossRate = int(float(self.lossCounter/(rtpPacket.seqNum() - self.savedRtpseq))*100)
 				self.fpsRate = self.framCounter
-				# print(f"data rate:{self.vidDataRate}kB/s | fps:{self.fpsRate}|loss rate: {self.RtpLossRate}%")
-				self.label['text'] = self.getStatisticString()
+				self.statLabel['text'] = self.getStatisticString()
 				self.flagFirstRecv = False
 				self.framCounter = 0
 				self.lossCounter = 0
@@ -175,6 +185,9 @@ class Client:
 					self.lossCounter += rtpPacket.seqNum() - self.frameNbr
 		self.frameNbr = rtpPacket.seqNum()
 	
+	def getDefaultString(self) -> str:
+		return "Hit PLAY button"
+
 	def getStatisticString(self) -> str:
 		return f"Data rate: {self.vidDataRate}kB/s | Loss rate: {self.RtpLossRate}% | FPS: {self.fpsRate}"
 
@@ -184,7 +197,7 @@ class Client:
 
 	def updateMovie(self, imageFile):
 		"""Update the image file as video frame in the GUI."""
-		self.label['image']=self.frame
+		self.label['image']=imageFile
 		
 	def connectToServer(self):
 		"""Connect to the Server. Start a new RTSP/TCP session."""
@@ -219,8 +232,7 @@ class Client:
 				self.rtspSeq) + '\nSession: ' + str(self.sessionId)
 			self.requestSent = self.TEARDOWN
 		elif requestCode == self.DESCRIBE:
-			# TODO: for bbace, send something to server to get describe session
-
+			msg = f"DESCRIBE {self.fileName} RTSP/1.0\nCSeq: {self.rtspSeq}\nSession: {self.sessionId}"
 			self.requestSent = self.DESCRIBE
 		else:
 			msg = 'Unknown request code'
@@ -263,7 +275,8 @@ class Client:
 				elif self.requestSent == self.TEARDOWN:
 					self.onTearDownAccepted()
 				elif self.requestSent == self.DESCRIBE:
-					self.onDescribeAccepted()
+					info = lines[3].split(' ')
+					self.onDescribeAccepted(info[1], info[2])
 		else:	# negative response from server
 			print(f"Oops from server: status<{status}> at seq<{seq}> in session<{session}>")
 
@@ -280,7 +293,7 @@ class Client:
 			self.state = self.READY
 	
 	def onPlayAccepted(self):
-		self.label['compound'] = 'bottom'
+		self.label['compound'] = 'none'
 		self.state = self.PLAYING
 	
 	def onPauseAccepted(self):
@@ -291,10 +304,9 @@ class Client:
 		self.state = self.INIT
 	
 	def onTearDownAcked(self):
-		self.frame = self.defaultFrame	# reset image
-		self.frameNbr = 0				# reset frame number
-		self.label['image']=self.frame	# update default frame
-		self.label['compound'] = 'image'# update compound
+		self.frameNbr = 0					# reset frame number
+		self.label['text']="Hit PLAY button"	# reset info
+		self.label['compound'] = 'text'			# reset compound
 		self.rtpSocket.close()			# close RTP socket
 		self.sessionId = 0				# reset session ID
 		self.teardownAcked = 0			# reset teardown ack
@@ -308,11 +320,14 @@ class Client:
 		self.lossCounter = 0
 		self.dataCounter = 0
 		self.framCounter = 0
+		self.fpsRate = 0
+		self.statLabel['text'] = self.getStatisticString()
 
-	def onDescribeAccepted(self):
-		# TODO: for bbace, process description
-		pass
-
+	def onDescribeAccepted(self, protocol, encoding):
+		self.label['text'] = f"Protocol: {protocol}\nEncoding: {encoding}"
+		self.label['compound'] = 'text'
+		self.state = self.INFO
+	
 	def openRtpPort(self):
 		"""Open RTP socket binded to a specified port."""
 		#-------------
