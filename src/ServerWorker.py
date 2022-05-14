@@ -24,7 +24,7 @@ class ServerWorker:
 	
 	def __init__(self, clientInfo):
 		self.clientInfo = clientInfo
-		self.delay = 0.03
+		self.delay = 0.05
 		
 	def run(self):
 		threading.Thread(target=self.recvRtspRequest).start()
@@ -62,17 +62,18 @@ class ServerWorker:
 					self.clientInfo['videoStream'] = VideoStream(filename)
 					self.vidTime = int(self.clientInfo['videoStream'].totalFrame() * self.delay)
 					self.state = self.READY
+				
+					# Generate a randomized RTSP session ID
+					self.clientInfo['session'] = randint(100000, 999999)
+
+					# Send RTSP reply
+					self.replyRtsp(self.OK_200, seq[1])
+				
+					# Get the RTP/UDP port from the last line
+					self.clientInfo['rtpPort'] = request[2].split(' ')[3]
+
 				except IOError:
 					self.replyRtsp(self.FILE_NOT_FOUND_404, seq[1])
-				
-				# Generate a randomized RTSP session ID
-				self.clientInfo['session'] = randint(100000, 999999)
-				
-				# Send RTSP reply
-				self.replyRtsp(self.OK_200, seq[1])
-				
-				# Get the RTP/UDP port from the last line
-				self.clientInfo['rtpPort'] = request[2].split(' ')[3]
 		
 		# Process PLAY request 		
 		elif requestType == self.PLAY:
@@ -180,5 +181,8 @@ class ServerWorker:
 		# Error messages
 		elif code == self.FILE_NOT_FOUND_404:
 			print("404 NOT FOUND\n")
+			reply = f"RTSP/1.0 404 FILE NOT FOUND\nCSeq: {seq}"
+			connSocket = self.clientInfo['rtspSocket'][0]
+			connSocket.send(reply.encode())
 		elif code == self.CON_ERR_500:
 			print("500 CONNECTION ERROR\n")

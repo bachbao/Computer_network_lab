@@ -134,7 +134,8 @@ class Client:
 		else:
 			if (self.state == self.INIT):
 				self.sendRtspRequest(self.SETUP)
-			self.sendRtspRequest(self.PLAY)
+			if (self.state == self.READY):
+				self.sendRtspRequest(self.PLAY)
 	
 	
 	def describeSession(self):
@@ -259,14 +260,14 @@ class Client:
 
 	def parseRtspReply(self, data):
 		"""Parse the RTSP reply from the server."""
-		# process payload
+		# process reply
 		lines = data.split('\n')
 		status = int(lines[0].split(' ')[1])
 		seq = int(lines[1].split(' ')[1])
-		session = int(lines[2].split(' ')[1])
 
-		# process reply
-		if status == 200:	# green light from server
+		# green light from server
+		if status == 200:
+			session = int(lines[2].split(' ')[1])
 			if (self.rtspSeq != seq):
 				print(f"Sequence conflict: clientSeq<{self.rtspSeq}> vs. serverSeq<{seq}>")
 			elif (self.requestSent != self.SETUP and self.sessionId != session):
@@ -283,8 +284,14 @@ class Client:
 				elif self.requestSent == self.DESCRIBE:
 					info = lines[3].split(' ')
 					self.onDescribeAccepted(info[1], info[2], int(info[3]))
-		else:	# negative response from server
-			print(f"Oops from server: status<{status}> at seq<{seq}> in session<{session}>")
+
+		# file not found
+		elif status == 404:
+			self.label['text'] = f"File not found: '{self.fileName}'\nPlease re-run the program with a different video"
+
+		# connection error
+		else:
+			print(f"Oops from server: status<{status}> at seq<{seq}>")
 
 	def onSetupAccepted(self, sessionId: int):
 		if (self.sessionId != 0):
