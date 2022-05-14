@@ -1,3 +1,4 @@
+from datetime import timedelta
 from tkinter import Tk, ttk
 import tkinter as tk
 import tkinter.messagebox
@@ -56,6 +57,7 @@ class Client:
 		self.lossCounter = 0
 		self.dataCounter = 0
 		self.framCounter = 0
+		self.currTime = 0
 
 		# create a label to display statistic
 		self.statLabel = ttk.Label(
@@ -173,6 +175,7 @@ class Client:
 				self.vidDataRate = self.dataCounter / 1000
 				self.RtpLossRate = int(float(self.lossCounter/(rtpPacket.seqNum() - self.savedRtpseq))*100)
 				self.fpsRate = self.framCounter
+				self.currTime += 1
 				self.statLabel['text'] = self.getStatisticString()
 				self.flagFirstRecv = False
 				self.framCounter = 0
@@ -189,7 +192,10 @@ class Client:
 		return "Hit PLAY button"
 
 	def getStatisticString(self) -> str:
-		return f"Data rate: {self.vidDataRate}kB/s | Loss rate: {self.RtpLossRate}% | FPS: {self.fpsRate}"
+		return f"Data rate: {self.vidDataRate}kB/s | Loss rate: {self.RtpLossRate}% | FPS: {self.fpsRate} | {self.formatTime(self.currTime)}"
+
+	def formatTime(self, time) -> str:
+		return str(timedelta(seconds=time))
 
 	def writeFrame(self, data):
 		"""Write the received frame to a temp image file. Return the image file."""
@@ -276,7 +282,7 @@ class Client:
 					self.onTearDownAccepted()
 				elif self.requestSent == self.DESCRIBE:
 					info = lines[3].split(' ')
-					self.onDescribeAccepted(info[1], info[2])
+					self.onDescribeAccepted(info[1], info[2], int(info[3]))
 		else:	# negative response from server
 			print(f"Oops from server: status<{status}> at seq<{seq}> in session<{session}>")
 
@@ -294,6 +300,7 @@ class Client:
 	
 	def onPlayAccepted(self):
 		self.label['compound'] = 'none'
+		self.label['text'] = ""
 		self.state = self.PLAYING
 	
 	def onPauseAccepted(self):
@@ -321,10 +328,12 @@ class Client:
 		self.dataCounter = 0
 		self.framCounter = 0
 		self.fpsRate = 0
+		self.currTime = 0
+		self.vidTime = 0
 		self.statLabel['text'] = self.getStatisticString()
 
-	def onDescribeAccepted(self, protocol, encoding):
-		self.label['text'] = f"Protocol: {protocol}\nEncoding: {encoding}"
+	def onDescribeAccepted(self, protocol, encoding, length: int):
+		self.label['text'] = f"Protocol: {protocol}\nEncoding: {encoding}\nVideo time: {length}s"
 		self.label['compound'] = 'text'
 		self.state = self.INFO
 	

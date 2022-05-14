@@ -17,6 +17,20 @@ class VideoStream:
 			self.frameNum += 1
 		return data
 		
+	## Extension ##
+	def totalFrame(self):
+		totalFrame = 0
+		self.fileCopy = open(self.filename, 'rb')
+		while True:
+			frameLength = self.fileCopy.read(5)
+			if frameLength:
+				self.fileCopy.read(int(frameLength))
+				totalFrame += 1
+			else:
+				self.fileCopy.close()
+				break
+		return totalFrame
+		
 	def frameNbr(self):
 		"""Get frame number."""
 		return self.frameNum
